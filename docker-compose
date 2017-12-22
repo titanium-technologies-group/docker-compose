@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# Run docker-compose in a container
+#
+# This script will attempt to mirror the host paths by using volumes for the
+# following paths:
+#   * $(pwd)
+#   * $(dirname $COMPOSE_FILE) if it's set
+#   * $HOME if it's set
+#
+# You can add additional volumes (or any docker run options) using
+# the $COMPOSE_OPTIONS environment variable.
+#
+# Original by Digital Ocean
+# Extended by @rakshazi
+
+
+set -e
+VERSION="1.18.0"
+IMAGE="docker/compose:${VERSION}"
+LAST_UPDATE="20171222"
+PYTHON="docker run -i --rm python:alpine python"
+
+# Updater
+if [[ "$(date +%Y%m%d)" > "$LAST_UPDATE" ]]; then
+    echo -e "\033[0;32m[docker-compose]\033[0m Checking update..."
+    NEW_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | echo $($PYTHON -c "import json,sys;sys.stderr = open('/dev/null', 'a');obj=json.load(sys.stdin);print(obj['tag_name'])" || echo $VERSION))
+    if [ $($PYTHON -c "import sys; from pkg_resources import parse_version;sys.stderr = open('/dev/null', 'a');print(parse_version('$VERSION') < parse_version('$NEW_VERSION'))") == "True" ]; then
+        sed -i "s/VERSION=\"$VERSION\"/VERSION=\"$NEW_VERSION\"/g;s/LAST_UPDATE=\"$LAST_UPDATE\"/LAST_UPDATE=\"$(date +%Y%m%d)\"/g" $0
+        echo -e "\033[0;32m[docker-compose]\033[0m New release: \033[0;96m$NEW_VERSION\033[0m"
+        $0 "$@"
+        exit 0
+    fi
+fi
+
+
+# Setup options for connecting to docker host
+if [ -z "$DOCKER_HOST" ]; then
+    DOCKER_HOST="/var/run/docker.sock"
+fi
+if [ -S "$DOCKER_HOST" ]; then
+    DOCKER_ADDR="-v $DOCKER_HOST:$DOCKER_HOST -e DOCKER_HOST"
+else
+    DOCKER_ADDR="-e DOCKER_HOST -e DOCKER_TLS_VERIFY -e DOCKER_CERT_PATH"
+fi
+
+
+# Setup volume mounts for compose config and context
+if [ "$(pwd)" != '/' ]; then
+    VOLUMES="-v $(pwd):$(pwd)"
+fi
+if [ -n "$COMPOSE_FILE" ]; then
+    compose_dir=$(dirname $COMPOSE_FILE)
+fi
+if [ -n "$compose_dir" ]; then
+    VOLUMES="$VOLUMES -v $compose_dir:$compose_dir"
+fi
+if [ -n "$HOME" ]; then
+    VOLUMES="$VOLUMES -v $HOME:$HOME -v $HOME:/root" # mount $HOME in /root to share docker.config
+fi
+
+# Only allocate tty if we detect one
+if [ -t 1 ]; then
+    DOCKER_RUN_OPTIONS="-t"
+fi
+if [ -t 0 ]; then
+    DOCKER_RUN_OPTIONS="$DOCKER_RUN_OPTIONS -i"
+fi
+
+exec docker run --rm $DOCKER_RUN_OPTIONS $DOCKER_ADDR $COMPOSE_OPTIONS $VOLUMES -w "$(pwd)" $IMAGE "$@"
