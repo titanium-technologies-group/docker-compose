@@ -26,11 +26,12 @@ if [[ "$(date +%Y%m%d)" > "$LAST_UPDATE" ]]; then
     echo -e "\033[0;32m[docker-compose]\033[0m Checking update..."
     NEW_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | echo $($PYTHON -c "import json,sys;sys.stderr = open('/dev/null', 'a');obj=json.load(sys.stdin);print(obj['tag_name'])" || echo $VERSION))
     if [ $($PYTHON -c "import sys; from pkg_resources import parse_version;sys.stderr = open('/dev/null', 'a');print(parse_version('$VERSION') < parse_version('$NEW_VERSION'))") == "True" ]; then
-        sed -i "s/VERSION=\"$VERSION\"/VERSION=\"$NEW_VERSION\"/g;s/LAST_UPDATE=\"$LAST_UPDATE\"/LAST_UPDATE=\"$(date +%Y%m%d)\"/g" $0
+        sed -i "s/VERSION=\"$VERSION\"/VERSION=\"$NEW_VERSION\"/g" $0
         echo -e "\033[0;32m[docker-compose]\033[0m New release: \033[0;96m$NEW_VERSION\033[0m"
         $0 "$@"
         exit 0
     fi
+        sed -i "s/LAST_UPDATE=\"$LAST_UPDATE\"/LAST_UPDATE=\"$(date +%Y%m%d)\"/g" $0
 fi
 
 
