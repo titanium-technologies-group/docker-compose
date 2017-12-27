@@ -16,9 +16,7 @@ That script requires only standard nix tools and provides auto-updates, without 
 
 ## Requirements
 
-* bash
 * sed
-* curl
 * docker
 
 ## Installation
