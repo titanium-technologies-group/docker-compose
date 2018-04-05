@@ -16,12 +16,12 @@
 
 
 set -e
-VERSION="1.18.0"
+VERSION="1.20.1"
 
 ## Updater
 
 # vars
-LAST_UPDATE="20171227"
+LAST_UPDATE="20180405"
 URL="https://api.github.com/repos/docker/compose/releases/latest"
 PYTHON_PREFIX="import json,sys;from pkg_resources import parse_version;sys.stderr = open('/dev/null', 'a')"
 PYTHON="docker run -i --rm python:alpine python"
@@ -41,7 +41,6 @@ if [[ "$(date +%Y%m%d)" > "$LAST_UPDATE" ]]; then
 fi
 ## End updater
 
-
 # Setup options for connecting to docker host
 if [ -z "$DOCKER_HOST" ]; then
     DOCKER_HOST="/var/run/docker.sock"
@@ -52,13 +51,34 @@ else
     DOCKER_ADDR="-e DOCKER_HOST -e DOCKER_TLS_VERIFY -e DOCKER_CERT_PATH"
 fi
 
+# Preload .env file if exists (required for include functionality)
+if [ -f $(pwd)/.env ]; then
+    source $(pwd)/.env
+fi
+# Catch compose file arg
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -f|--file) COMPOSE_FILE="$2" break;;
+        *)break;;
+    esac
+done
+# Set default compose file
+if [ -z "$COMPOSE_FILE" ]; then
+    COMPOSE_FILE="docker-compose.yml"
+fi;
+# Generate merged compose files content
+if DCAO="$(type -p "dcao-include")" || [[ -n $DCAO ]]; then
+    COMPOSE_CONTENT=$($DCAO $COMPOSE_FILE)
+else
+    COMPOSE_CONTENT=$(cat $COMPOSE_FILE)
+fi
 
 # Setup volume mounts for compose config and context
 if [ "$(pwd)" != '/' ]; then
     VOLUMES="-v $(pwd):$(pwd)"
 fi
 if [ -n "$COMPOSE_FILE" ]; then
-    compose_dir=$(dirname $COMPOSE_FILE)
+    compose_dir=$(readlink -f $(dirname $COMPOSE_FILE))
 fi
 if [ -n "$compose_dir" ]; then
     VOLUMES="$VOLUMES -v $compose_dir:$compose_dir"
@@ -75,4 +95,9 @@ if [ -t 0 ]; then
     DOCKER_RUN_OPTIONS="$DOCKER_RUN_OPTIONS -i"
 fi
 
-exec docker run --rm $DOCKER_RUN_OPTIONS $DOCKER_ADDR $COMPOSE_OPTIONS $VOLUMES -w "$(pwd)" docker/compose:${VERSION} "$@"
+if [ -n "$DCAO" ]; then
+    COMPOSE_FILE="$compose_dir/generated.yml"
+    echo "$COMPOSE_CONTENT" > $COMPOSE_FILE
+fi
+
+exec docker run --rm $DOCKER_RUN_OPTIONS $DOCKER_ADDR $COMPOSE_OPTIONS $VOLUMES -w "$(pwd)" docker/compose:${VERSION} -f $COMPOSE_FILE "$@"
