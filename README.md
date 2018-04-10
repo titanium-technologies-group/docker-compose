@@ -18,7 +18,6 @@ That script requires only standard nix tools and provides auto-updates, without 
 
 * sed
 * docker
-* **(OPTIONAL)** [compose-addons](https://pypi.python.org/pypi/compose-addons) - if you want to use `include` in compose files
 
 ## Installation
 
